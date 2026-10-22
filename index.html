@@ -6,7 +6,7 @@
 <title>แผนที่แผนสำรวจและสถานะ (Template)</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#eef1f5;--sf:#fff;--ink:#1c2733;--mute:#6b7785;--line:#e1e6ec;--as:#10213f;--mark:#f2b705;--ok:#2f9e6f;--warn:#e8890c;--bad:#d64545;--todo:#9aa5b1;--map:#dfe5ea;
+:root{--bg:#eef1f5;--sf:#fff;--ink:#1c2733;--mute:#6b7785;--line:#e1e6ec;--as:#10213f;--mark:#f2b705;--ok:#2f9e6f;--warn:#e8890c;--bad:#d64545;--todo:#1d5fd6;--map:#dfe5ea;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121820;--sf:#1d252f;--ink:#e8ecf0;--mute:#97a3b0;--line:#2e3743;--as:#0b1424;--map:#27303b;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#121820;--sf:#1d252f;--ink:#e8ecf0;--mute:#97a3b0;--line:#2e3743;--as:#0b1424;--map:#27303b;color-scheme:dark}
@@ -31,7 +31,7 @@ h1{margin:0;font-size:20px;line-height:1.2}
 @media(max-width:900px){.main{grid-template-columns:1fr}}
 #mapbox{position:relative;height:min(68vh,640px);min-height:340px;border-radius:10px;overflow:hidden;background:var(--map);border:1px solid var(--line)}
 canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
-.zoom{position:absolute;right:10px;top:10px;display:grid;gap:6px}
+.zoom{position:absolute;right:10px;top:10px;display:grid;gap:6px;justify-items:end}
 .zoom button{width:34px;height:34px;padding:0;font-size:18px;background:var(--sf);color:var(--ink);border:1px solid var(--line)}
 .leg{position:absolute;left:10px;bottom:10px;background:var(--sf);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;display:flex;gap:10px;flex-wrap:wrap;max-width:90%}
 .leg span{display:flex;align-items:center;gap:5px}.leg b{width:18px;height:4px;border-radius:2px;display:inline-block}
@@ -63,7 +63,7 @@ details summary{cursor:pointer;font-weight:700;font-size:13px}
   <section class="kpis" id="kpis"></section>
   <section class="main">
     <div id="mapbox"><canvas id="cv"></canvas>
-      <div class="zoom"><button id="zi" aria-label="ขยาย">+</button><button id="zo" aria-label="ย่อ">−</button><button id="zf" aria-label="ดูทั้งหมด" style="font-size:13px">⤢</button></div>
+      <div class="zoom"><button id="zi" aria-label="ขยาย">+</button><button id="zo" aria-label="ย่อ">−</button><button id="zf" aria-label="ซูมไปที่ข้อมูล" style="font-size:13px;width:auto;padding:0 12px">⤢ ซูมไปที่ข้อมูล</button></div>
       <div class="leg" id="leg"></div></div>
     <aside class="side">
       <div class="card"><div class="sh">ค้นหาและกรอง</div>
@@ -89,7 +89,7 @@ details summary{cursor:pointer;font-weight:700;font-size:13px}
 <script>
 
 var FIELD={id:"link_id",code:"road_code",name:"road_name",bu:"bureau_nam",ow:"owner_name",ks:"km_start",ke:"km_end",len:"length_km"};
-var STAT=[["todo","ยังไม่สำรวจ","#9aa5b1"],["done","สำรวจแล้ว","#2f9e6f"],["blocked","สำรวจไม่ได้","#d64545"],["hold","รอ / เลื่อน","#e8890c"]];
+var STAT=[["todo","ยังไม่สำรวจ","#1d5fd6"],["done","สำรวจแล้ว","#2f9e6f"],["blocked","สำรวจไม่ได้","#d64545"],["hold","รอ / เลื่อน","#e8890c"]];
 var $=function(i){return document.getElementById(i)},cv=$("cv"),cx=cv.getContext("2d");
 var P=null,F=[],ST={},LK={},SEL=null,SLUG="sample",V={x:.5,y:.5,z:5},W=1,H=1,DPR=1;
 var ME=null,PROJ_OPTS={},LIVE=0,LASTSIG="";
@@ -105,10 +105,13 @@ function setProject(p,slug){
   P=p;SLUG=slug;SEL=null;ST={};LK={};
   F=p.features.map(function(f){var m=[],b=[1,1,0,0];for(var i=0;i<f.g.length;i+=2){var q=merc(f.g[i],f.g[i+1]);m.push(q[0],q[1]);if(q[0]<b[0])b[0]=q[0];if(q[1]<b[1])b[1]=q[1];if(q[0]>b[2])b[2]=q[0];if(q[1]>b[3])b[3]=q[1]}f._m=m;f._b=b;return f});
   F.forEach(function(f){var l=LK[f.id]||(LK[f.id]={len:0});l.len=Math.max(l.len,f.len||0)});
-  opts("fB","ทั้งหมด",uniq("bu"));opts("fO","ทั้งหมด",uniq("ow"));
+  opts("fB","ทั้งหมด",[]);opts("fO","ทั้งหมด",[]);cascade();
   $("fS").innerHTML='<option value="">ทั้งหมด</option>'+STAT.map(function(s){return'<option value="'+s[0]+'">'+s[1]+'</option>'}).join("");
   $("fQ").value="";fit();watchStatus();refresh();
 }
+function cascade(){var b=$("fB").value,o=$("fO").value,bu=[],ow=[];
+  F.forEach(function(f){if((!o||f.ow===o)&&f.bu&&bu.indexOf(f.bu)<0)bu.push(f.bu);if((!b||f.bu===b)&&f.ow&&ow.indexOf(f.ow)<0)ow.push(f.ow)});
+  bu.sort();ow.sort();opts("fB","ทั้งหมด",bu);opts("fO","ทั้งหมด",ow);$("fB").value=bu.indexOf(b)>=0?b:"";$("fO").value=ow.indexOf(o)>=0?o:""}
 function uniq(k){var v=[];F.forEach(function(f){if(f[k]&&v.indexOf(f[k])<0)v.push(f[k])});return v.sort()}
 function opts(id,l,v){$(id).innerHTML='<option value="">'+l+'</option>'+v.map(function(x){return'<option>'+x+'</option>'}).join("")}
 function vis(f){var q=$("fQ").value.trim().toLowerCase(),b=$("fB").value,o=$("fO").value,s=$("fS").value;
@@ -116,7 +119,7 @@ function vis(f){var q=$("fQ").value.trim().toLowerCase(),b=$("fB").value,o=$("fO
 
 function size(){var r=cv.parentNode.getBoundingClientRect();DPR=window.devicePixelRatio||1;W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;draw()}
 function S(){return 256*Math.pow(2,V.z)}
-function fit(){var b=[1,1,0,0],n=0;F.forEach(function(f){if(!vis(f))return;n++;b[0]=Math.min(b[0],f._b[0]);b[1]=Math.min(b[1],f._b[1]);b[2]=Math.max(b[2],f._b[2]);b[3]=Math.max(b[3],f._b[3])});
+function fit(){if(!(W>10&&H>10))return;var b=[1,1,0,0],n=0;F.forEach(function(f){if(!vis(f))return;n++;b[0]=Math.min(b[0],f._b[0]);b[1]=Math.min(b[1],f._b[1]);b[2]=Math.max(b[2],f._b[2]);b[3]=Math.max(b[3],f._b[3])});
   if(!n)return;V.x=(b[0]+b[2])/2;V.y=(b[1]+b[3])/2;var w=Math.max(b[2]-b[0],1e-6),h=Math.max(b[3]-b[1],1e-6);V.z=Math.log(Math.min(W/w,H/h)*.9/256)/Math.LN2;draw()}
 var TILES={},raf=0;
 function tile(z,x,y){var k=z+"/"+x+"/"+y;if(TILES[k])return TILES[k];var im=new Image();im.onload=function(){im.ok=1;draw()};im.onerror=function(){};im.src="https://tile.openstreetmap.org/"+k+".png";return TILES[k]=im}
@@ -133,7 +136,7 @@ function paint(){
     var st=stOf(f.id),isSel=SEL===f.id;if((pass===1)!==isSel)return;
     var m=f._m;cx.beginPath();cx.moveTo(ox+m[0]*s,oy+m[1]*s);for(var i=2;i<m.length;i+=2)cx.lineTo(ox+m[i]*s,oy+m[i+1]*s);
     if(isSel){cx.strokeStyle="#fff";cx.lineWidth=8;cx.stroke()}
-    cx.strokeStyle=col(st);cx.lineWidth=isSel?5:(st==="todo"?1.6:2.6);cx.stroke()})}
+    cx.strokeStyle=col(st);cx.lineWidth=isSel?5:(st==="todo"?2:2.8);cx.stroke()})}
 }
 function zoomAt(px,py,dz){var s=S(),wx=V.x+(px-W/2)/s,wy=V.y+(py-H/2)/s;V.z=Math.max(2,Math.min(19,V.z+dz));s=S();V.x=wx-(px-W/2)/s;V.y=wy-(py-H/2)/s;draw()}
 var PT={},moved=0,lastD=0;
@@ -261,7 +264,7 @@ function openProject(k){var o=PROJ_OPTS[k];if(o.local)return setProject(o.local,
 $("proj").onchange=function(){openProject(this.value)};
 
 /* ---------- เริ่มต้น ---------- */
-["fQ","fB","fO","fS"].forEach(function(i){$(i).oninput=function(){refresh()}});
+["fQ","fB","fO","fS"].forEach(function(i){$(i).oninput=function(){if(i==="fB"||i==="fO")cascade();refresh();fit()}});
 document.querySelectorAll(".ed").forEach(function(e){try{var v=localStorage.getItem("ed:"+e.dataset.k);if(v)e.textContent=v}catch(x){}e.addEventListener("blur",function(){try{localStorage.setItem("ed:"+e.dataset.k,e.textContent)}catch(x){}})});
 if(window.ResizeObserver)new ResizeObserver(size).observe($("mapbox"));else window.addEventListener("resize",size);
 size();setLive(false);
