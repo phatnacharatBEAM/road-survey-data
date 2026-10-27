@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>if(/[?&]embed=1/.test(location.search))document.documentElement.className="embed"</script>
 <title>แผนที่แผนสำรวจและสถานะ (Template)</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -50,12 +51,23 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .ed{outline:none;border-radius:3px}.ed:hover,.ed:focus{background:rgba(242,183,5,.2)}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--as);color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;display:none;z-index:9}
 details summary{cursor:pointer;font-weight:700;font-size:13px}
+.lv2{display:none}
+.embed header{display:none}
+.embed body{background:transparent}
+.embed .wrap{padding:8px;gap:8px}
+.embed .main{grid-template-columns:1fr}
+.embed .side{display:none}
+.tip{display:none}
+.embed .tip.on{display:block;position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--sf);border:1px solid var(--line);border-radius:8px;padding:4px 12px;font-size:12px;white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis}
+.embed #mapbox{height:calc(100vh - 150px);min-height:300px}
+.embed .lv2{display:block;position:absolute;left:10px;top:10px;background:var(--sf);border:1px solid var(--line);border-radius:8px;padding:3px 10px;font-size:12px}
 </style>
 </head>
 <body>
 <header><div class="top">
   <div><h1 class="ed" data-k="title" contenteditable="true">แผนที่แผนสำรวจและสถานะ</h1><div class="sub ed" data-k="sub" contenteditable="true">คลิกเส้นถนนเพื่อดูและเปลี่ยนสถานะ</div></div>
   <span id="live" style="color:#c7d0dc;font-size:12px">⚪ ยังไม่เชื่อมต่อ</span>
+  <button id="cpl" title="คัดลอกลิงก์ของโครงการนี้ ไปวางในแดชบอร์ด">🔗 คัดลอกลิงก์โครงการ</button>
   <label style="color:#c7d0dc;min-width:200px">โครงการ<select id="proj"></select></label>
 </div></header>
 <div class="wrap">
@@ -64,7 +76,7 @@ details summary{cursor:pointer;font-weight:700;font-size:13px}
   <section class="main">
     <div id="mapbox"><canvas id="cv"></canvas>
       <div class="zoom"><button id="zi" aria-label="ขยาย">+</button><button id="zo" aria-label="ย่อ">−</button><button id="zf" aria-label="ซูมไปที่ข้อมูล" style="font-size:13px;width:auto;padding:0 12px">⤢ ซูมไปที่ข้อมูล</button></div>
-      <div class="leg" id="leg"></div></div>
+      <div id="tip" class="tip"></div><div id="live2" class="lv2"></div><div class="leg" id="leg"></div></div>
     <aside class="side">
       <div class="card"><div class="sh">ค้นหาและกรอง</div>
         <label>ค้นหา (รหัสหรือชื่อสายทาง)<input id="fQ" placeholder="เช่น สค.2004"></label>
@@ -92,7 +104,7 @@ var FIELD={id:"link_id",code:"road_code",name:"road_name",bu:"bureau_nam",ow:"ow
 var STAT=[["todo","ยังไม่สำรวจ","#1d5fd6"],["done","สำรวจแล้ว","#2f9e6f"],["blocked","สำรวจไม่ได้","#d64545"],["hold","รอ / เลื่อน","#e8890c"]];
 var $=function(i){return document.getElementById(i)},cv=$("cv"),cx=cv.getContext("2d");
 var P=null,F=[],ST={},LK={},SEL=null,SLUG="sample",V={x:.5,y:.5,z:5},W=1,H=1,DPR=1;
-var ME=null,PROJ_OPTS={},LIVE=0,LASTSIG="";
+var ME=null,PROJ_OPTS={},LIVE=0,LASTSIG="",EMBED=document.documentElement.className==="embed",_wh=0;
 
 function merc(lo,la){return[(lo+180)/360,.5-Math.log(Math.tan(Math.PI/4+la*Math.PI/360))/(2*Math.PI)]}
 function stOf(id){return ST[id]?ST[id].s:"todo"}
@@ -146,7 +158,7 @@ cv.addEventListener("pointermove",function(e){var p=PT[e.pointerId];if(!p)return
   var dx=e.offsetX-p[0],dy=e.offsetY-p[1];moved+=Math.abs(dx)+Math.abs(dy);var s=S();V.x-=dx/s;V.y-=dy/s;PT[e.pointerId]=[e.offsetX,e.offsetY];draw()});
 cv.addEventListener("pointerup",function(e){var p=PT[e.pointerId];delete PT[e.pointerId];cv.style.cursor="grab";if(p&&moved<5&&!Object.keys(PT).length)pick(e.offsetX,e.offsetY)});
 cv.addEventListener("pointercancel",function(e){delete PT[e.pointerId]});
-cv.addEventListener("wheel",function(e){e.preventDefault();zoomAt(e.offsetX,e.offsetY,-e.deltaY/400)},{passive:false});
+cv.addEventListener("wheel",function(e){if(EMBED&&!(e.ctrlKey||e.metaKey)){if(Date.now()-_wh>4000){toast("กด Ctrl ค้างไว้แล้วเลื่อนล้อเมาส์เพื่อซูมแผนที่");_wh=Date.now()}return}e.preventDefault();zoomAt(e.offsetX,e.offsetY,-e.deltaY/400)},{passive:false});
 $("zi").onclick=function(){zoomAt(W/2,H/2,.7)};$("zo").onclick=function(){zoomAt(W/2,H/2,-.7)};$("zf").onclick=fit;
 function pick(px,py){var s=S(),ox=W/2-V.x*s,oy=H/2-V.y*s,best=null,bd=12;
   F.forEach(function(f){if(!vis(f))return;var m=f._m;for(var i=0;i<m.length-2;i+=2){var ax=ox+m[i]*s,ay=oy+m[i+1]*s,bx=ox+m[i+2]*s,by=oy+m[i+3]*s,dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy,t=L?Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/L)):0,d=Math.hypot(px-ax-t*dx,py-ay-t*dy);if(d<bd){bd=d;best=f.id}}});
@@ -192,7 +204,7 @@ async function importShp(files,name){
   if(!feats.length)throw"ไม่พบเส้นในไฟล์";
   return{name:name,features:feats}}
 /* ===== ตั้งค่า (แก้ที่นี่) ===== */
-var API_URL="https://script.google.com/macros/s/AKfycby51mH5X7BLnUSnIgnwPpURHXSUnvjgrZSBcuxZ3tOouUrOQItKOzD6rf32lYnSmkl1/exec";   /* วาง URL ของ Apps Script Web App (ลงท้าย /exec) ถ้าเว้นว่างจะเป็นโหมดทดลอง ไม่บันทึกร่วมกัน */
+var API_URL="";   /* วาง URL ของ Apps Script Web App (ลงท้าย /exec) ถ้าเว้นว่างจะเป็นโหมดทดลอง ไม่บันทึกร่วมกัน */
 var RAW_BASE="https://raw.githubusercontent.com/phatnacharatBEAM/road-survey-data/refs/heads/main/";
 var POLL_MS=8000;
 var GEO_PROJECTS=[{id:"DRR_RS26",name:"DRR RS26",file:"DRR_RS26.geojson"}]; /* ถ้ามี projects.json ใน repo จะใช้รายการนั้นแทน */
@@ -203,15 +215,17 @@ function fromGeo(g,name){var fe=[];(g.features||[]).forEach(function(ft){var p=f
   parts.forEach(function(c){var a=[];c.forEach(function(q){a.push(q[0],q[1])});
     fe.push({id:p[FIELD.id]!=null&&p[FIELD.id]!==""?p[FIELD.id]:"r"+fe.length,code:p[FIELD.code]||"",name:String(p[FIELD.name]||"").slice(0,120),bu:p[FIELD.bu]||"",ow:p[FIELD.ow]||"",ks:p[FIELD.ks]||"",ke:p[FIELD.ke]||"",len:+(+p[FIELD.len]||0).toFixed(3),g:a})})});
   return{name:name,features:fe}}
-function setLive(on){$("live").textContent=on?"🟢 สด · อัปเดตทุก "+(POLL_MS/1000)+" วินาที":"⚪ "+(API_URL?"เชื่อมต่อไม่ได้":"โหมดทดลอง (ไม่บันทึกร่วมกัน)")}
+function setLive(on){var t=on?"🟢 สด · อัปเดตทุก "+(POLL_MS/1000)+" วินาที":"⚪ "+(API_URL?"เชื่อมต่อไม่ได้":"โหมดทดลอง (ไม่บันทึกร่วมกัน)");$("live").textContent=t;$("live2").textContent=t}
 
-function selPanel(){var el=$("sel");
+function tipUpdate(){var t=$("tip"),f=SEL==null?null:F.filter(function(x){return x.id===SEL})[0];if(!f){t.className="tip";return}
+  var lb=STAT.filter(function(s){return s[0]===stOf(SEL)})[0];t.textContent=f.code+" · "+lb[1]+" · "+fmt(LK[SEL].len)+" km";t.className="tip on"}
+function selPanel(){var el=$("sel");if(EMBED)tipUpdate();
   if(SEL==null){el.innerHTML='<div class="sh">รายละเอียด</div><div class="rd">คลิกเส้นถนนบนแผนที่เพื่อดูข้อมูลและเปลี่ยนสถานะ</div>';return}
   var f=F.filter(function(x){return x.id===SEL})[0],d=ST[SEL]||{},s=stOf(SEL),can=!!ME;
   el.innerHTML='<div class="code">'+f.code+'</div><div>'+f.name+'</div><div class="rd">'+f.bu+' · '+f.ow+'</div><div class="rd">กม. '+f.ks+' – '+f.ke+' · ยาว '+fmt(LK[SEL].len)+' km</div>'+
    '<div class="st">'+STAT.map(function(x){return'<button data-s="'+x[0]+'" class="'+(s===x[0]?"on":"")+'" style="'+(s===x[0]?"background:"+x[2]+";border-color:"+x[2]:"")+'"'+(can?"":" disabled")+'>'+x[1]+'</button>'}).join("")+'</div>'+
    '<label>หมายเหตุ<textarea id="note"'+(can?"":" disabled")+'></textarea></label>'+
-   '<div class="rd" style="margin-top:6px">'+(d.at?'แก้ไขล่าสุด: '+(d.by||"ไม่ทราบ")+' · '+new Date(+d.at).toLocaleString("th-TH"):"ยังไม่มีประวัติการแก้ไข")+(can?"":" · เข้าสู่ระบบเพื่อแก้ไข")+'</div>';
+   '<div class="rd" style="margin-top:6px">'+(d.at?'แก้ไขล่าสุด: '+(d.by||"ไม่ทราบ")+' · '+new Date(+d.at).toLocaleString("th-TH"):"ยังไม่มีประวัติการแก้ไข")+(can||EMBED?"":" · เข้าสู่ระบบเพื่อแก้ไข")+'</div>';
   $("note").value=d.note||"";
   el.querySelectorAll(".st button").forEach(function(b){b.onclick=function(){setStatus(SEL,b.dataset.s)}});
   $("note").onchange=function(){if(ST[SEL]||this.value)setStatus(SEL,stOf(SEL))}}
@@ -262,8 +276,12 @@ function projList(cur){$("proj").innerHTML=Object.keys(PROJ_OPTS).map(function(k
 function openProject(k){var o=PROJ_OPTS[k];if(o.local)return setProject(o.local,k);toast("กำลังโหลดโครงการ…");
   getFile(o.geo).then(function(g){setProject(fromGeo(g,o.name),k)}).catch(function(){banner("โหลดไฟล์แผนที่ไม่ได้ ตรวจสอบว่าไฟล์ "+o.geo+" อยู่ใน repo และเปิดเป็นสาธารณะ")})}
 $("proj").onchange=function(){openProject(this.value)};
+$("cpl").onclick=function(){if(String(SLUG).indexOf("l_")===0)return toast("โครงการนี้ยังไม่ได้อัปโหลดขึ้น GitHub");
+  var u=location.origin+location.pathname+"?project="+encodeURIComponent(SLUG);
+  (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){toast("คัดลอกลิงก์แล้ว")}).catch(function(){window.prompt("คัดลอกลิงก์นี้",u)})};
 
 /* ---------- เริ่มต้น ---------- */
+window.addEventListener("message",function(e){var d=e.data;if(d&&d.type==="theme")document.documentElement.setAttribute("data-theme",d.dark?"dark":"light")});
 ["fQ","fB","fO","fS"].forEach(function(i){$(i).oninput=function(){if(i==="fB"||i==="fO")cascade();refresh();fit()}});
 document.querySelectorAll(".ed").forEach(function(e){try{var v=localStorage.getItem("ed:"+e.dataset.k);if(v)e.textContent=v}catch(x){}e.addEventListener("blur",function(){try{localStorage.setItem("ed:"+e.dataset.k,e.textContent)}catch(x){}})});
 if(window.ResizeObserver)new ResizeObserver(size).observe($("mapbox"));else window.addEventListener("resize",size);
@@ -273,7 +291,7 @@ if(!API_URL)ME={name:"ผู้ทดลอง",role:"admin",local:true};
 uiAuth();
 if(API_URL){try{var sv=JSON.parse(localStorage.getItem("me")||"null");if(sv)login(sv.email,sv.pin,true)}catch(e){}}
 getFile("projects.json").then(function(l){if(l&&l.length)GEO_PROJECTS=l}).catch(function(){}).then(function(){
-  GEO_PROJECTS.forEach(function(p){PROJ_OPTS[p.id]={name:p.name,geo:p.file}});projList(GEO_PROJECTS[0].id);openProject(GEO_PROJECTS[0].id)});
+  GEO_PROJECTS.forEach(function(p){PROJ_OPTS[p.id]={name:p.name,geo:p.file}});var q=decodeURIComponent((location.search.match(/[?&]project=([^&#]+)/)||[])[1]||""),cur=GEO_PROJECTS.filter(function(p){return p.id===q})[0]||GEO_PROJECTS[0];projList(cur.id);openProject(cur.id)});
 setInterval(function(){if(document.visibilityState==="visible")pull()},POLL_MS);
 
 </script>
