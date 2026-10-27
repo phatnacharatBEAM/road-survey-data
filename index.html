@@ -204,7 +204,7 @@ async function importShp(files,name){
   if(!feats.length)throw"ไม่พบเส้นในไฟล์";
   return{name:name,features:feats}}
 /* ===== ตั้งค่า (แก้ที่นี่) ===== */
-var API_URL="";   /* วาง URL ของ Apps Script Web App (ลงท้าย /exec) ถ้าเว้นว่างจะเป็นโหมดทดลอง ไม่บันทึกร่วมกัน */
+var API_URL="https://script.google.com/macros/s/AKfycby51mH5X7BLnUSnIgnwPpURHXSUnvjgrZSBcuxZ3tOouUrOQItKOzD6rf32lYnSmkl1/exec";   /* วาง URL ของ Apps Script Web App (ลงท้าย /exec) ถ้าเว้นว่างจะเป็นโหมดทดลอง ไม่บันทึกร่วมกัน */
 var RAW_BASE="https://raw.githubusercontent.com/phatnacharatBEAM/road-survey-data/refs/heads/main/";
 var POLL_MS=8000;
 var GEO_PROJECTS=[{id:"DRR_RS26",name:"DRR RS26",file:"DRR_RS26.geojson"}]; /* ถ้ามี projects.json ใน repo จะใช้รายการนั้นแทน */
