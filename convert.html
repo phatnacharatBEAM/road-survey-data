@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>แปลง .shp เป็น GeoJSON</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f5;--sf:#fff;--ink:#1c2733;--mute:#6b7785;--line:#e1e6ec;--as:#10213f;--mark:#f2b705;--ok:#2f9e6f;--bad:#d64545;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#121820;--sf:#1d252f;--ink:#e8ecf0;--mute:#97a3b0;--line:#2e3743;--as:#0b1424;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans Thai",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;font-size:14px;line-height:1.55}
+header{background:var(--as);color:#fff;padding:14px 20px 18px;position:relative}
+header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:repeating-linear-gradient(90deg,var(--mark) 0 28px,transparent 28px 48px)}
+h1{margin:0;font-size:20px}.sub{color:#f2c94c;font-size:13px}
+main{max-width:760px;margin:0 auto;padding:16px;display:grid;gap:12px}
+.card{background:var(--sf);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+label{display:grid;gap:4px;font-size:12px;color:var(--mute);margin-bottom:10px}
+input{width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit;font-size:13px}
+button{background:var(--as);color:#fff;border:0;border-radius:6px;padding:9px 14px;font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+button.ok{background:var(--ok)}
+.msg{margin-top:10px;font-size:13px}.err{color:var(--bad)}.good{color:var(--ok)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0}
+.stat{background:var(--bg);border-radius:8px;padding:8px 10px}.stat b{display:block;font-size:18px}.stat span{font-size:12px;color:var(--mute)}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;font-size:12px;margin:6px 0}
+ol{margin:6px 0 0;padding-left:20px}.note{color:var(--mute);font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>แปลง .shp เป็น GeoJSON</h1><div class="sub">ทำงานในเครื่องคุณทั้งหมด ไฟล์ไม่ถูกส่งไปที่ไหน ไม่ต้องเข้าสู่ระบบ</div></header>
+<main>
+  <section class="card">
+    <label>เลือกไฟล์ของโครงการ (กด Ctrl ค้างเพื่อเลือกหลายไฟล์พร้อมกัน) · ต้องมี .shp และ .dbf ส่วน .prj และ .cpg ควรเลือกมาด้วย
+      <input id="pf" type="file" multiple accept=".shp,.dbf,.prj,.cpg,.shx"></label>
+    <label>รหัสโครงการ (ใช้เป็นชื่อไฟล์ ชื่อแท็บในชีต และลิงก์ · ใช้ได้เฉพาะ A-Z a-z 0-9 _ -)
+      <input id="pid" placeholder="เช่น DRR_RS26"></label>
+    <button id="go">แปลงเป็น GeoJSON</button>
+    <div class="msg" id="msg"></div>
+  </section>
+  <section class="card" id="res" style="display:none">
+    <div class="grid" id="stats"></div>
+    <button class="ok" id="dl">ดาวน์โหลดอีกครั้ง</button>
+    <p><b>ขั้นต่อไป</b></p>
+    <ol>
+      <li>อัปโหลดไฟล์ที่ดาวน์โหลดไว้เข้าโฟลเดอร์ <code>geojson</code> ใน repo GitHub (Add file → Upload files → Commit)</li>
+      <li>เสร็จแล้ว ไม่ต้องแก้ไฟล์อื่น รอสักครู่ (ไม่เกิน 5 นาที) โครงการจะขึ้นในช่องเลือกโครงการของหน้าแผนที่เอง ชื่อที่แสดงมาจากชื่อไฟล์</li>
+    </ol>
+    <details><summary>อยากตั้งชื่อที่แสดงเป็นภาษาไทย (ไม่บังคับ)</summary>
+      <p class="note">เพิ่มบรรทัดนี้ในไฟล์ <code>projects.json</code> (ใส่เครื่องหมายจุลภาคคั่นรายการ) แล้วแก้ค่า name เป็นชื่อที่ต้องการ</p>
+      <pre id="snip"></pre>
+      <button id="cp">คัดลอกบรรทัดนี้</button>
+    </details>
+  </section>
+  <p class="note">ชื่อไฟล์และรหัสโครงการใช้ได้เฉพาะ A-Z a-z 0-9 _ - · รองรับพิกัด WGS84 (EPSG:4326) และ UTM WGS84 (เช่น EPSG:32647/32648) ที่มีไฟล์ .prj ร่วมด้วย · ระบบพิกัดอื่น (เช่น Indian 1975) ให้ส่งออกเป็น EPSG:4326 ใน QGIS ก่อน · ไฟล์ต้องเป็นเส้น (Polyline)</p>
+</main>
+<script>
+var FIELD={id:"link_id",code:"road_code",name:"road_name",bu:"bureau_nam",ow:"owner_name",ks:"km_start",ke:"km_end",len:"length_km"};
+function dp(p,tol){var n=p.length/2;if(n<3)return p;var k=new Uint8Array(n);k[0]=k[n-1]=1;var st=[[0,n-1]];
+  while(st.length){var q=st.pop(),a=q[0],b=q[1],ax=p[a*2],ay=p[a*2+1],dx=p[b*2]-ax,dy=p[b*2+1]-ay,L=dx*dx+dy*dy,md=-1,mi=-1;
+    for(var i=a+1;i<b;i++){var px=p[i*2]-ax,py=p[i*2+1]-ay,d=L?(dy*px-dx*py)*(dy*px-dx*py)/L:px*px+py*py;if(d>md){md=d;mi=i}}
+    if(md>tol*tol){k[mi]=1;st.push([a,mi],[mi,b])}}
+  var o=[];for(i=0;i<n;i++)if(k[i])o.push(+p[i*2].toFixed(5),+p[i*2+1].toFixed(5));return o}
+function parseShp(buf){var v=new DataView(buf),o=100,out=[];
+  while(o+8<=buf.byteLength){var len=v.getInt32(o+4)*2,c=o+8,t=v.getInt32(c,true);
+    if(t===0)out.push([]);
+    else if(t===3||t===13||t===23){var np=v.getInt32(c+36,true),pt=v.getInt32(c+40,true),po=c+44,xy=po+np*4,idx=[],parts=[],i,j;
+      for(i=0;i<np;i++)idx.push(v.getInt32(po+i*4,true));idx.push(pt);
+      for(i=0;i<np;i++){var a=[];for(j=idx[i];j<idx[i+1];j++)a.push(v.getFloat64(xy+j*16,true),v.getFloat64(xy+j*16+8,true));parts.push(a)}
+      out.push(parts)}
+    else throw"ไฟล์ .shp ต้องเป็นเส้น (Polyline) แต่พบชนิดข้อมูล "+t;
+    o=c+len}
+  return out}
+function parseDbf(buf,enc){var v=new DataView(buf),n=v.getUint32(4,true),hl=v.getUint16(8,true),rl=v.getUint16(10,true),fl=[],o=32,td;
+  try{td=new TextDecoder(enc)}catch(e){td=new TextDecoder("utf-8")}
+  while(v.getUint8(o)!==13){var nm="";for(var i=0;i<11;i++){var b=v.getUint8(o+i);if(!b)break;nm+=String.fromCharCode(b)}fl.push({n:nm,t:String.fromCharCode(v.getUint8(o+11)),l:v.getUint8(o+16)});o+=32}
+  var u=new Uint8Array(buf),rows=[];
+  for(var r=0;r<n;r++){var p=hl+r*rl+1,row={};fl.forEach(function(f){var s=td.decode(u.subarray(p,p+f.l)).replace(/\0/g,"").trim();row[f.n]=(f.t==="N"||f.t==="F")?parseFloat(s):s;p+=f.l});rows.push(row)}
+  return rows}
+/* ---- แปลงพิกัด UTM (WGS84) เป็นองศา ---- */
+function utmToLL(E,N,zone,south){var a=6378137,f=1/298.257223563,k0=.9996,n=f/(2-f),n2=n*n,n3=n2*n,n4=n3*n,
+  A=a/(1+n)*(1+n2/4+n4/64),b1=n/2-2*n2/3+37*n3/96-n4/360,b2=n2/48+n3/15-437*n4/1440,b3=17*n3/480-37*n4/840,b4=4397*n4/161280,
+  d1=2*n-2*n2/3-2*n3+116*n4/45,d2=7*n2/3-8*n3/5-227*n4/45,d3=56*n3/15-136*n4/35,d4=4279*n4/630,
+  xi=(N-(south?1e7:0))/(k0*A),eta=(E-5e5)/(k0*A),B=[b1,b2,b3,b4],xp=xi,ep=eta;
+  for(var j=1;j<=4;j++){xp-=B[j-1]*Math.sin(2*j*xi)*Math.cosh(2*j*eta);ep-=B[j-1]*Math.cos(2*j*xi)*Math.sinh(2*j*eta)}
+  var chi=Math.asin(Math.sin(xp)/Math.cosh(ep)),D=[d1,d2,d3,d4],phi=chi;
+  for(j=1;j<=4;j++)phi+=D[j-1]*Math.sin(2*j*chi);
+  return[(zone*6-183)+Math.atan2(Math.sinh(ep),Math.cos(xp))*180/Math.PI,phi*180/Math.PI]}
+function crsInfo(prj){if(!prj)return{type:"none"};
+  if(/PROJCS/i.test(prj)){var nm=(prj.match(/PROJCS\["([^"]+)"/i)||[])[1]||"ไม่ทราบ",z=prj.match(/UTM[_ ]ZONE[_ ](\d{1,2})\s*([NS])?/i);
+    if(z&&/WGS[_ ]?(19)?84/i.test(prj))return{type:"utm",zone:+z[1],south:/S/i.test(z[2]||"N"),name:nm};return{type:"bad",name:nm}}
+  var g=(prj.match(/GEOGCS\["([^"]+)"/i)||[])[1]||"";return{type:"geo",name:g,wgs:/WGS[_ ]?(19)?84/i.test(g)}}
+function fv(r,k){var kk=k.toLowerCase();for(var x in r)if(x.toLowerCase()===kk)return r[x]}
+async function importShp(files,name){
+  var m={},names=[];Array.prototype.forEach.call(files,function(f){var e=f.name.split(".").pop().toLowerCase();m[e]=f;names.push("."+e)});
+  if(!m.shp||!m.dbf)throw"เลือกไฟล์ไม่ครบ: ต้องมีทั้ง .shp และ .dbf (เลือกหลายไฟล์พร้อมกันโดยกด Ctrl ค้างไว้) · ที่เลือกมา: "+(names.join(" ")||"ไม่มี");
+  var prj=m.prj?await m.prj.text():"",ci=crsInfo(prj),note="";
+  if(ci.type==="bad")throw"ระบบพิกัด “"+ci.name+"” ยังไม่รองรับ ให้ส่งออกใน QGIS เป็น EPSG:4326 (WGS 84) ก่อน แล้วลองใหม่";
+  if(ci.type==="utm")note+=" · แปลงจาก "+ci.name+" เป็น WGS84 ให้อัตโนมัติ";
+  if(ci.type==="geo"&&!ci.wgs)note+=" · คำเตือน: datum “"+ci.name+"” ไม่ใช่ WGS84 ตำแหน่งอาจคลาดเคลื่อนได้หลายร้อยเมตร";
+  var enc=m.cpg?(await m.cpg.text()).trim().toLowerCase():"utf-8";if(/874|tis/.test(enc))enc="windows-874";else if(/utf/.test(enc))enc="utf-8";
+  var geo=parseShp(await m.shp.arrayBuffer()),rec=parseDbf(await m.dbf.arrayBuffer(),enc),feats=[];
+  geo.forEach(function(parts,i){var r=rec[i]||{};parts.forEach(function(p){
+    var q=p;if(ci.type==="utm"){q=[];for(var k=0;k<p.length;k+=2){var ll=utmToLL(p[k],p[k+1],ci.zone,ci.south);q.push(ll[0],ll[1])}}
+    else if(p.length&&(Math.abs(p[0])>180||Math.abs(p[1])>90))throw(ci.type==="none"?"ไม่มีไฟล์ .prj และพิกัดไม่ใช่องศา กรุณาเลือกไฟล์ .prj ร่วมด้วย":"พิกัดไม่ใช่ลองจิจูด/ละติจูด ให้ส่งออกเป็น EPSG:4326 ใน QGIS ก่อน");
+    var id=fv(r,FIELD.id);
+    feats.push({id:id!=null&&id!==""?id:"r"+i,code:fv(r,FIELD.code)||"",name:String(fv(r,FIELD.name)||"").slice(0,254),bu:fv(r,FIELD.bu)||"",ow:fv(r,FIELD.ow)||"",ks:fv(r,FIELD.ks)||"",ke:fv(r,FIELD.ke)||"",len:+(+fv(r,FIELD.len)||0).toFixed(3),g:dp(q,.0002)})})});
+  if(!feats.length)throw"ไม่พบเส้นในไฟล์";
+  var keys=Object.keys(rec[0]||{}).map(function(x){return x.toLowerCase()}),miss=Object.keys(FIELD).filter(function(k){return keys.indexOf(FIELD[k].toLowerCase())<0}).map(function(k){return FIELD[k]});
+  if(miss.length)note+=" · ไม่พบคอลัมน์: "+miss.join(", ")+" (ข้อมูลส่วนนั้นจะว่าง)";
+  return{name:name,features:feats,note:note}}
+function download(name,txt){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"application/geo+json"}));a.download=name;document.body.appendChild(a);a.click();a.remove()}
+
+var $=function(i){return document.getElementById(i)},OUT=null;
+function slug(s){return String(s||"").replace(/[^A-Za-z0-9_-]+/g,"_").replace(/^_+|_+$/g,"")}
+$("pf").onchange=function(){var f=Array.prototype.filter.call(this.files,function(x){return/\.shp$/i.test(x.name)})[0];if(f&&!$("pid").value)$("pid").value=slug(f.name.replace(/\.shp$/i,""))};
+$("go").onclick=async function(){var msg=$("msg");msg.className="msg";$("res").style.display="none";
+  try{var fl=$("pf").files;if(!fl||!fl.length)throw"ยังไม่ได้เลือกไฟล์";
+    var id=slug($("pid").value);if(!id)throw"กรุณาตั้งรหัสโครงการ (ใช้ได้เฉพาะ A-Z a-z 0-9 _ -)";
+    if(/^users$/i.test(id)||/_log$/i.test(id)||/_old\d*$/i.test(id))throw"รหัสโครงการห้ามเป็น users หรือลงท้ายด้วย _log หรือ _old";
+    $("pid").value=id;msg.textContent="กำลังอ่านไฟล์…";
+    var p=await importShp(fl,id),L={},bu={},ow={};
+    var gj={type:"FeatureCollection",name:id,features:p.features.map(function(f){var c=[],pr={};for(var i=0;i<f.g.length;i+=2)c.push([f.g[i],f.g[i+1]]);
+      pr[FIELD.bu]=f.bu;pr[FIELD.ow]=f.ow;pr[FIELD.id]=f.id;pr[FIELD.code]=f.code;pr[FIELD.name]=f.name;pr[FIELD.ks]=f.ks;pr[FIELD.ke]=f.ke;pr[FIELD.len]=f.len;
+      L[f.id]=Math.max(L[f.id]||0,f.len);if(f.bu)bu[f.bu]=1;if(f.ow)ow[f.ow]=1;
+      return{type:"Feature",properties:pr,geometry:{type:"LineString",coordinates:c}}})};
+    var txt=JSON.stringify(gj),km=0,ids=Object.keys(L);ids.forEach(function(k){km+=L[k]});
+    OUT={name:id+".geojson",txt:txt};download(OUT.name,txt);
+    var st=[[p.features.length,"เส้นทั้งหมด"],[ids.length,"สายทางไม่ซ้ำ (link_id)"],[km.toLocaleString("th-TH",{maximumFractionDigits:1}),"กม. (นับสายละครั้ง)"],[Object.keys(bu).length,"สำนักงาน"],[Object.keys(ow).length,"จังหวัด/หน่วยงาน"],[(txt.length/1048576).toFixed(2),"MB (ขนาดไฟล์)"]];
+    $("stats").innerHTML=st.map(function(s){return'<div class="stat"><b>'+s[0]+'</b><span>'+s[1]+'</span></div>'}).join("");
+    $("snip").textContent='{"id": "'+id+'", "name": "'+id+'", "file": "geojson/'+id+'.geojson"}';
+    $("res").style.display="";msg.className="msg good";msg.textContent="✅ แปลงสำเร็จ ดาวน์โหลดไฟล์ "+OUT.name+" แล้ว"+(p.note||"")}
+  catch(e){msg.className="msg err";msg.textContent="❌ "+(e&&e.message||e)}};
+$("dl").onclick=function(){if(OUT)download(OUT.name,OUT.txt)};
+$("cp").onclick=function(){var t=$("snip").textContent;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){$("cp").textContent="คัดลอกแล้ว ✓"}).catch(function(){window.prompt("คัดลอกบรรทัดนี้",t)})};
+</script>
+</body>
+</html>
