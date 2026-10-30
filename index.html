@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>if(/[?&]embed=1/.test(location.search))document.documentElement.className="embed"</script>
+<script src="config.js"></script>
 <title>แผนที่แผนสำรวจและสถานะ (Template)</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -192,23 +193,70 @@ function parseDbf(buf,enc){var v=new DataView(buf),n=v.getUint32(4,true),hl=v.ge
   var u=new Uint8Array(buf),rows=[];
   for(var r=0;r<n;r++){var p=hl+r*rl+1,row={};fl.forEach(function(f){var s=td.decode(u.subarray(p,p+f.l)).replace(/\0/g,"").trim();row[f.n]=(f.t==="N"||f.t==="F")?parseFloat(s):s;p+=f.l});rows.push(row)}
   return rows}
+/* ---- แปลงพิกัด UTM (WGS84) เป็นองศา ---- */
+function utmToLL(E,N,zone,south){var a=6378137,f=1/298.257223563,k0=.9996,n=f/(2-f),n2=n*n,n3=n2*n,n4=n3*n,
+  A=a/(1+n)*(1+n2/4+n4/64),b1=n/2-2*n2/3+37*n3/96-n4/360,b2=n2/48+n3/15-437*n4/1440,b3=17*n3/480-37*n4/840,b4=4397*n4/161280,
+  d1=2*n-2*n2/3-2*n3+116*n4/45,d2=7*n2/3-8*n3/5-227*n4/45,d3=56*n3/15-136*n4/35,d4=4279*n4/630,
+  xi=(N-(south?1e7:0))/(k0*A),eta=(E-5e5)/(k0*A),B=[b1,b2,b3,b4],xp=xi,ep=eta;
+  for(var j=1;j<=4;j++){xp-=B[j-1]*Math.sin(2*j*xi)*Math.cosh(2*j*eta);ep-=B[j-1]*Math.cos(2*j*xi)*Math.sinh(2*j*eta)}
+  var chi=Math.asin(Math.sin(xp)/Math.cosh(ep)),D=[d1,d2,d3,d4],phi=chi;
+  for(j=1;j<=4;j++)phi+=D[j-1]*Math.sin(2*j*chi);
+  return[(zone*6-183)+Math.atan2(Math.sinh(ep),Math.cos(xp))*180/Math.PI,phi*180/Math.PI]}
+function crsInfo(prj){if(!prj)return{type:"none"};
+  if(/PROJCS/i.test(prj)){var nm=(prj.match(/PROJCS\["([^"]+)"/i)||[])[1]||"ไม่ทราบ",z=prj.match(/UTM[_ ]ZONE[_ ](\d{1,2})\s*([NS])?/i);
+    if(z&&/WGS[_ ]?(19)?84/i.test(prj))return{type:"utm",zone:+z[1],south:/S/i.test(z[2]||"N"),name:nm};return{type:"bad",name:nm}}
+  var g=(prj.match(/GEOGCS\["([^"]+)"/i)||[])[1]||"";return{type:"geo",name:g,wgs:/WGS[_ ]?(19)?84/i.test(g)}}
+function fv(r,k){var kk=k.toLowerCase();for(var x in r)if(x.toLowerCase()===kk)return r[x]}
 async function importShp(files,name){
-  var m={};Array.prototype.forEach.call(files,function(f){m[f.name.split(".").pop().toLowerCase()]=f});
-  if(!m.shp||!m.dbf)throw"ต้องเลือกไฟล์ .shp และ .dbf อย่างน้อย";
-  if(m.prj&&/PROJCS/i.test(await m.prj.text()))throw"ระบบพิกัดไม่ใช่ WGS84 (EPSG:4326) ให้แปลงใน QGIS ก่อน";
+  var m={},names=[];Array.prototype.forEach.call(files,function(f){var e=f.name.split(".").pop().toLowerCase();m[e]=f;names.push("."+e)});
+  if(!m.shp||!m.dbf)throw"เลือกไฟล์ไม่ครบ: ต้องมีทั้ง .shp และ .dbf (เลือกหลายไฟล์พร้อมกันโดยกด Ctrl ค้างไว้) · ที่เลือกมา: "+(names.join(" ")||"ไม่มี");
+  var prj=m.prj?await m.prj.text():"",ci=crsInfo(prj),note="";
+  if(ci.type==="bad")throw"ระบบพิกัด “"+ci.name+"” ยังไม่รองรับ ให้ส่งออกใน QGIS เป็น EPSG:4326 (WGS 84) ก่อน แล้วลองใหม่";
+  if(ci.type==="utm")note+=" · แปลงจาก "+ci.name+" เป็น WGS84 ให้อัตโนมัติ";
+  if(ci.type==="geo"&&!ci.wgs)note+=" · คำเตือน: datum “"+ci.name+"” ไม่ใช่ WGS84 ตำแหน่งอาจคลาดเคลื่อนได้หลายร้อยเมตร";
   var enc=m.cpg?(await m.cpg.text()).trim().toLowerCase():"utf-8";if(/874|tis/.test(enc))enc="windows-874";else if(/utf/.test(enc))enc="utf-8";
   var geo=parseShp(await m.shp.arrayBuffer()),rec=parseDbf(await m.dbf.arrayBuffer(),enc),feats=[];
   geo.forEach(function(parts,i){var r=rec[i]||{};parts.forEach(function(p){
-    if(p.length&&(Math.abs(p[0])>180||Math.abs(p[1])>90))throw"พิกัดไม่ใช่ลองจิจูด/ละติจูด (ต้องเป็น WGS84)";
-    feats.push({id:r[FIELD.id]!=null&&r[FIELD.id]!==""?r[FIELD.id]:"r"+i,code:r[FIELD.code]||"",name:String(r[FIELD.name]||"").slice(0,254),bu:r[FIELD.bu]||"",ow:r[FIELD.ow]||"",ks:r[FIELD.ks]||"",ke:r[FIELD.ke]||"",len:+(+r[FIELD.len]||0).toFixed(3),g:dp(p,.0002)})})});
+    var q=p;if(ci.type==="utm"){q=[];for(var k=0;k<p.length;k+=2){var ll=utmToLL(p[k],p[k+1],ci.zone,ci.south);q.push(ll[0],ll[1])}}
+    else if(p.length&&(Math.abs(p[0])>180||Math.abs(p[1])>90))throw(ci.type==="none"?"ไม่มีไฟล์ .prj และพิกัดไม่ใช่องศา กรุณาเลือกไฟล์ .prj ร่วมด้วย":"พิกัดไม่ใช่ลองจิจูด/ละติจูด ให้ส่งออกเป็น EPSG:4326 ใน QGIS ก่อน");
+    var id=fv(r,FIELD.id);
+    feats.push({id:id!=null&&id!==""?id:"r"+i,code:fv(r,FIELD.code)||"",name:String(fv(r,FIELD.name)||"").slice(0,254),bu:fv(r,FIELD.bu)||"",ow:fv(r,FIELD.ow)||"",ks:fv(r,FIELD.ks)||"",ke:fv(r,FIELD.ke)||"",len:+(+fv(r,FIELD.len)||0).toFixed(3),g:dp(q,.0002)})})});
   if(!feats.length)throw"ไม่พบเส้นในไฟล์";
-  return{name:name,features:feats}}
+  var keys=Object.keys(rec[0]||{}).map(function(x){return x.toLowerCase()}),miss=Object.keys(FIELD).filter(function(k){return keys.indexOf(FIELD[k].toLowerCase())<0}).map(function(k){return FIELD[k]});
+  if(miss.length)note+=" · ไม่พบคอลัมน์: "+miss.join(", ")+" (ข้อมูลส่วนนั้นจะว่าง)";
+  return{name:name,features:feats,note:note}}
 /* ===== ตั้งค่า (แก้ที่นี่) ===== */
-var API_URL="https://script.google.com/macros/s/AKfycby51mH5X7BLnUSnIgnwPpURHXSUnvjgrZSBcuxZ3tOouUrOQItKOzD6rf32lYnSmkl1/exec";   /* วาง URL ของ Apps Script Web App (ลงท้าย /exec) ถ้าเว้นว่างจะเป็นโหมดทดลอง ไม่บันทึกร่วมกัน */
+var API_URL=(window.SURVEY_CONFIG&&window.SURVEY_CONFIG.api)||"";   /* วาง URL ของ Apps Script Web App (ลงท้าย /exec) ถ้าเว้นว่างจะเป็นโหมดทดลอง ไม่บันทึกร่วมกัน */
 var RAW_BASE="https://raw.githubusercontent.com/phatnacharatBEAM/road-survey-data/refs/heads/main/";
 var POLL_MS=8000;
 var GEO_PROJECTS=[{id:"DRR_RS26",name:"DRR RS26",file:"DRR_RS26.geojson"}]; /* ถ้ามี projects.json ใน repo จะใช้รายการนั้นแทน */
 /* ================================ */
+function loadList(){var get=function(u){return fetch(u).then(function(r){if(!r.ok)throw"notfound";return r.text()})};
+  return get("projects.json?v="+Date.now()).catch(function(){return get(RAW_BASE+"projects.json?v="+Date.now())}).then(function(t){var l;
+    try{l=JSON.parse(t)}catch(e){throw"json"}
+    l=(Array.isArray(l)?l:[]).filter(function(p){return p&&p.id&&p.file}).map(function(p){return{id:String(p.id),name:p.name||String(p.id),file:String(p.file)}});
+    if(!l.length)throw"empty";return l})}
+/* ===== รายการโครงการ: สแกนโฟลเดอร์ geojson ใน repo อัตโนมัติ (ไม่ต้องแก้ projects.json) ===== */
+var GEO_DIR=(window.SURVEY_CONFIG&&window.SURVEY_CONFIG.folder)||"geojson";
+function scanFolder(){var ri=RAW_BASE.match(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\//);if(!ri)return Promise.reject("noinfo");
+  var key="geo:list:"+ri[1]+"/"+ri[2]+"/"+GEO_DIR,now=Date.now(),fresh=!/[?&]refresh=1/.test(location.search);
+  try{var c=JSON.parse(localStorage.getItem(key)||"null");if(fresh&&c&&now-c.t<300000)return Promise.resolve(c.v)}catch(e){}
+  return fetch("https://api.github.com/repos/"+ri[1]+"/"+ri[2]+"/contents/"+GEO_DIR).then(function(r){if(!r.ok)throw"api";return r.json()}).then(function(arr){
+    var v=(Array.isArray(arr)?arr:[]).filter(function(x){return x.type==="file"&&/\.geojson$/i.test(x.name)}).map(function(x){return x.name});
+    try{localStorage.setItem(key,JSON.stringify({t:now,v:v}))}catch(e){}return v})
+   .catch(function(e){try{var c=JSON.parse(localStorage.getItem(key)||"null");if(c)return c.v}catch(x){}throw e})}
+function buildProjects(){
+  return Promise.all([scanFolder().catch(function(){return null}),loadList().catch(function(e){return{err:e}})]).then(function(r){
+    var files=r[0],list=Array.isArray(r[1])?r[1]:null,err=list?null:(r[1]&&r[1].err),out=[],seen={},skip=[],msg=[];
+    if(list)list.forEach(function(p){out.push(p);seen[p.id]=1});
+    (files||[]).forEach(function(f){var id=f.replace(/\.geojson$/i,"");
+      if(!/^[A-Za-z0-9_-]+$/.test(id)||/_log$/i.test(id)||/_old\d*$/i.test(id)||id.toLowerCase()==="users"){skip.push(f);return}
+      if(seen[id])return;seen[id]=1;out.push({id:id,name:id.replace(/_/g," "),file:GEO_DIR+"/"+f})});
+    if(err==="json")msg.push("อ่านไฟล์ projects.json ไม่ได้ เพราะรูปแบบไม่ถูกต้อง (มักลืมเครื่องหมายจุลภาค , คั่นรายการ) ระบบจึงใช้เฉพาะไฟล์ที่พบในโฟลเดอร์ "+GEO_DIR);
+    if(skip.length)msg.push("ข้ามไฟล์ "+skip.join(", ")+" เพราะชื่อใช้ไม่ได้ (ใช้ได้เฉพาะ A-Z a-z 0-9 _ - ไม่มีเว้นวรรคหรือภาษาไทย) ให้เปลี่ยนชื่อไฟล์");
+    if(!out.length){msg.push(files===null?"อ่านรายการโครงการจาก GitHub ไม่ได้ ตอนนี้แสดงเฉพาะโครงการเริ่มต้น":"ไม่พบไฟล์ .geojson ในโฟลเดอร์ "+GEO_DIR+" ตอนนี้แสดงเฉพาะโครงการเริ่มต้น")}
+    else GEO_PROJECTS=out;
+    if(msg.length)banner(msg.join(" · "))})}
 function getFile(f){return fetch(f).then(function(r){if(!r.ok)throw 0;return r.json()}).catch(function(){return fetch(RAW_BASE+f).then(function(r){if(!r.ok)throw 0;return r.json()})})}
 function fromGeo(g,name){var fe=[];(g.features||[]).forEach(function(ft){var p=ft.properties||{},ge=ft.geometry;if(!ge)return;
   var parts=ge.type==="LineString"?[ge.coordinates]:(ge.type==="MultiLineString"?ge.coordinates:[]);
@@ -260,16 +308,16 @@ $("lx").onclick=function(){ME=null;try{localStorage.removeItem("me")}catch(e){}u
 
 /* ---------- แปลง .shp เป็น GeoJSON (แอดมิน) ---------- */
 function download(name,txt){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"application/geo+json"}));a.download=name;document.body.appendChild(a);a.click();a.remove()}
-$("pgo").onclick=async function(){var msg=$("pmsg");
-  try{msg.textContent="กำลังอ่านไฟล์…";var fl=$("pf").files,sh=Array.prototype.filter.call(fl,function(f){return/\.shp$/i.test(f.name)})[0],base=sh?sh.name.replace(/\.shp$/i,""):"project";
-    var p=await importShp(fl,base);
-    var gj={type:"FeatureCollection",name:base,features:p.features.map(function(f){var c=[],pr={};for(var i=0;i<f.g.length;i+=2)c.push([f.g[i],f.g[i+1]]);
+$("pgo").onclick=async function(){var msg=$("pmsg");msg.style.color="";
+  try{var fl=$("pf").files;if(!fl||!fl.length)throw"ยังไม่ได้เลือกไฟล์";msg.textContent="กำลังอ่านไฟล์…";
+    var sh=Array.prototype.filter.call(fl,function(f){return/\.shp$/i.test(f.name)})[0],base=sh?sh.name.replace(/\.shp$/i,""):"project";
+    var p=await importShp(fl,base),gj={type:"FeatureCollection",name:base,features:p.features.map(function(f){var c=[],pr={};for(var i=0;i<f.g.length;i+=2)c.push([f.g[i],f.g[i+1]]);
       pr[FIELD.bu]=f.bu;pr[FIELD.ow]=f.ow;pr[FIELD.id]=f.id;pr[FIELD.code]=f.code;pr[FIELD.name]=f.name;pr[FIELD.ks]=f.ks;pr[FIELD.ke]=f.ke;pr[FIELD.len]=f.len;
       return{type:"Feature",properties:pr,geometry:{type:"LineString",coordinates:c}}})};
     download(base+".geojson",JSON.stringify(gj));
-    msg.textContent="แปลงแล้ว "+p.features.length+" เส้น · ดาวน์โหลด "+base+".geojson แล้ว นำไปอัปโหลดขึ้น GitHub และเพิ่มชื่อโครงการใน projects.json";
+    msg.textContent="✅ แปลงแล้ว "+p.features.length+" เส้น · ดาวน์โหลด "+base+".geojson แล้ว"+(p.note||"")+" · ขั้นต่อไป: อัปโหลดไฟล์นี้ขึ้น GitHub แล้วเพิ่มโครงการใน projects.json";
     PROJ_OPTS["l_"+base]={name:base+" (ตัวอย่างในเครื่อง)",local:p};projList("l_"+base);setProject(p,"l_"+base)}
-  catch(e){msg.textContent="ไม่สำเร็จ: "+(e.message||e)}};
+  catch(e){msg.style.color="#d64545";msg.textContent="❌ "+(e&&e.message||e);toast("แปลงไฟล์ไม่สำเร็จ")}};
 
 /* ---------- รายการโครงการ ---------- */
 function projList(cur){$("proj").innerHTML=Object.keys(PROJ_OPTS).map(function(k){return'<option value="'+k+'">'+PROJ_OPTS[k].name+'</option>'}).join("");if(cur)$("proj").value=cur}
@@ -290,7 +338,7 @@ banner(API_URL?"":"โหมดทดลอง: ยังไม่ได้ต�
 if(!API_URL)ME={name:"ผู้ทดลอง",role:"admin",local:true};
 uiAuth();
 if(API_URL){try{var sv=JSON.parse(localStorage.getItem("me")||"null");if(sv)login(sv.email,sv.pin,true)}catch(e){}}
-getFile("projects.json").then(function(l){if(l&&l.length)GEO_PROJECTS=l}).catch(function(){}).then(function(){
+buildProjects().then(function(){
   GEO_PROJECTS.forEach(function(p){PROJ_OPTS[p.id]={name:p.name,geo:p.file}});var q=decodeURIComponent((location.search.match(/[?&]project=([^&#]+)/)||[])[1]||""),cur=GEO_PROJECTS.filter(function(p){return p.id===q})[0]||GEO_PROJECTS[0];projList(cur.id);openProject(cur.id)});
 setInterval(function(){if(document.visibilityState==="visible")pull()},POLL_MS);
 
