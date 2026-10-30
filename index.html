@@ -258,10 +258,18 @@ function buildProjects(){
     else GEO_PROJECTS=out;
     if(msg.length)banner(msg.join(" · "))})}
 function getFile(f){return fetch(f).then(function(r){if(!r.ok)throw 0;return r.json()}).catch(function(){return fetch(RAW_BASE+f).then(function(r){if(!r.ok)throw 0;return r.json()})})}
-function fromGeo(g,name){var fe=[];(g.features||[]).forEach(function(ft){var p=ft.properties||{},ge=ft.geometry;if(!ge)return;
+/* หน่วยของ length_km: ถ้าไฟล์ระบุ "length_unit":"m" หรือ "km" ที่ระดับบนสุดของ GeoJSON จะใช้ตามนั้น
+   ถ้าไม่ระบุ จะเทียบ length_km กับความยาวเส้นจริงของแต่ละแถว (ค่ามัธยฐาน) ถ้าเกิน ~30 เท่า ถือว่าเป็นเมตร
+   ใช้ตัดสินหน่วยเท่านั้น ค่าที่แสดงมาจาก length_km เสมอ */
+function geoKm(ge){var pa=ge.type==="LineString"?[ge.coordinates]:(ge.type==="MultiLineString"?ge.coordinates:[]),t=0,r=Math.PI/180;
+  pa.forEach(function(c){for(var i=1;i<c.length;i++){var a=c[i-1],b=c[i],d1=(b[1]-a[1])*r,d2=(b[0]-a[0])*r,h=Math.pow(Math.sin(d1/2),2)+Math.cos(a[1]*r)*Math.cos(b[1]*r)*Math.pow(Math.sin(d2/2),2);t+=12742*Math.asin(Math.min(1,Math.sqrt(h)))}});return t}
+function lenDiv(g){var u=String(g.length_unit||"").toLowerCase();if(/^(m|meter|metre|meters|metres)$/.test(u))return 1000;if(u==="km")return 1;
+  var r=[];(g.features||[]).forEach(function(ft){var v=+((ft.properties||{})[FIELD.len]),k=ft.geometry?geoKm(ft.geometry):0;if(v>0&&k>0)r.push(v/k)});
+  if(!r.length)return 1;r.sort(function(a,b){return a-b});return r[r.length>>1]>30?1000:1}
+function fromGeo(g,name){var fe=[],D=lenDiv(g);console.log("length_km unit for "+name+": "+(D===1000?"meters (/1000)":"km"));(g.features||[]).forEach(function(ft){var p=ft.properties||{},ge=ft.geometry;if(!ge)return;
   var parts=ge.type==="LineString"?[ge.coordinates]:(ge.type==="MultiLineString"?ge.coordinates:[]);
   parts.forEach(function(c){var a=[];c.forEach(function(q){a.push(q[0],q[1])});
-    fe.push({id:p[FIELD.id]!=null&&p[FIELD.id]!==""?p[FIELD.id]:"r"+fe.length,code:p[FIELD.code]||"",name:String(p[FIELD.name]||"").slice(0,120),bu:p[FIELD.bu]||"",ow:p[FIELD.ow]||"",ks:p[FIELD.ks]||"",ke:p[FIELD.ke]||"",len:+(+p[FIELD.len]||0).toFixed(3),g:a})})});
+    fe.push({id:p[FIELD.id]!=null&&p[FIELD.id]!==""?p[FIELD.id]:"r"+fe.length,code:p[FIELD.code]||"",name:String(p[FIELD.name]||"").slice(0,120),bu:p[FIELD.bu]||"",ow:p[FIELD.ow]||"",ks:p[FIELD.ks]||"",ke:p[FIELD.ke]||"",len:+((+p[FIELD.len]||0)/D).toFixed(3),g:a})})});
   return{name:name,features:fe}}
 function setLive(on){var t=on?"🟢 สด · อัปเดตทุก "+(POLL_MS/1000)+" วินาที":"⚪ "+(API_URL?"เชื่อมต่อไม่ได้":"โหมดทดลอง (ไม่บันทึกร่วมกัน)");$("live").textContent=t;$("live2").textContent=t}
 
